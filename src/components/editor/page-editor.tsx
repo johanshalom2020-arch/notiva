@@ -316,7 +316,12 @@ function BlockRow({
           {slashItems.map((item, i) => (
             <button
               key={item.type}
-              onClick={() => api.onTurnInto(block, item.type, false)}
+              type="button"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                api.onTurnInto(block, item.type, false);
+              }}
               className={`flex w-full items-center gap-3 rounded-xl px-2.5 py-2 text-left ${
                 i === 0
                   ? "bg-[color-mix(in_srgb,var(--accent)_12%,transparent)]"
@@ -347,8 +352,13 @@ function BlockRow({
             {BLOCK_TYPES.map((item) => (
               <button
                 key={item.type}
+                type="button"
                 title={item.label}
-                onClick={() => api.onTurnInto(block, item.type, true)}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  api.onTurnInto(block, item.type, true);
+                }}
                 className={`grid size-9 place-items-center rounded-lg transition ${
                   block.type === item.type
                     ? "bg-[var(--accent)] text-white"
@@ -367,8 +377,13 @@ function BlockRow({
             {COLOR_TOKENS.map((token) => (
               <button
                 key={token || "default"}
+                type="button"
                 title={token || "Default"}
-                onClick={() => api.onSetColor(block, token)}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  api.onSetColor(block, token);
+                }}
                 className={`grid size-6 place-items-center rounded-full ring-2 transition ${
                   block.color === token ? "ring-[var(--accent)]" : "ring-black/10 dark:ring-white/15"
                 }`}
@@ -386,8 +401,13 @@ function BlockRow({
             {COLOR_TOKENS.map((token) => (
               <button
                 key={token || "default"}
+                type="button"
                 title={token || "None"}
-                onClick={() => api.onSetBg(block, token)}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  api.onSetBg(block, token);
+                }}
                 className={`grid size-6 place-items-center rounded-full ring-2 transition ${
                   block.bg === token ? "ring-[var(--accent)]" : "ring-black/10 dark:ring-white/15"
                 }`}
@@ -406,14 +426,24 @@ function BlockRow({
             ].map((action) => (
               <button
                 key={action.label}
-                onClick={action.fn}
+                type="button"
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  action.fn();
+                }}
                 className="flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-[13px] font-medium text-slate-600 hover:bg-black/[0.04] dark:text-neutral-300 dark:hover:bg-white/[0.06]"
               >
                 <action.Icon size={14} /> {action.label}
               </button>
             ))}
             <button
-              onClick={() => api.onDelete(block)}
+              type="button"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                api.onDelete(block);
+              }}
               className="flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-[13px] font-medium text-rose-500 hover:bg-rose-500/10"
             >
               <Trash2 size={14} /> Delete
