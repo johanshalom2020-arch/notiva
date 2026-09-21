@@ -833,7 +833,20 @@ export function PageEditor({
         />
       )}
 
-      <div className="relative rounded-[26px] border border-white/50 bg-white/75 pb-16 pt-3 shadow-2xl shadow-slate-900/10 backdrop-blur-2xl dark:border-white/10 dark:bg-neutral-950/60">
+      {/*
+        NOTE: z-30 added here. This panel uses `backdrop-blur-2xl`, and any
+        element with a non-"none" backdrop-filter creates its own stacking
+        context per the CSS spec — even though it only has `position: relative`
+        with no explicit z-index. Without an explicit z-index here, that
+        stacking context sits at level 0, which put the ENTIRE panel (including
+        the z-30 slash menu nested inside it) below the fixed z-20 backdrop
+        above. The backdrop is invisible (no background), so the slash menu
+        was still visible, but the backdrop was physically on top for pointer
+        events — so clicking a menu option just triggered the backdrop's
+        onClick (closing everything) instead of the option's own handler.
+        Giving the panel an explicit z-30 (> the backdrop's z-20) fixes this.
+      */}
+      <div className="relative z-30 rounded-[26px] border border-white/50 bg-white/75 pb-16 pt-3 shadow-2xl shadow-slate-900/10 backdrop-blur-2xl dark:border-white/10 dark:bg-neutral-950/60">
         {/* save status */}
         <div className="pointer-events-none absolute right-4 top-4 z-10 flex items-center gap-1.5 rounded-full bg-black/[0.05] px-3 py-1.5 text-[11px] font-bold text-slate-500 backdrop-blur dark:bg-white/10 dark:text-neutral-300">
           {saving ? (
