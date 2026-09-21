@@ -565,7 +565,10 @@ export function PageEditor({
 
   const handleTurnInto = useCallback(
     (block: EditableBlock, type: string, keepContent: boolean) => {
-      const content = keepContent ? block.content : "";
+      // Strip the leading slash (and any filter text after it) from the content
+      // so "/todo" or "/bullet" doesn't get left in the block after conversion.
+      let content = keepContent ? block.content : "";
+      if (content.startsWith("/")) content = "";
       patchBlock(block.id, { type, content, checked: type === "todo" ? block.checked : false });
       persistBlock(block.id, { type, content }, 250);
       setSlash(null);
