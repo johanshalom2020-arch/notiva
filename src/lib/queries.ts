@@ -1,6 +1,6 @@
 import { db } from "@/db";
 import { assessments, blocks, pages, subjects, userSettings } from "@/db/schema";
-import { and, asc, count, desc, eq } from "drizzle-orm";
+import { and, asc, count, desc, eq, sql } from "drizzle-orm";
 import { DEFAULT_THEME, type Theme } from "./theme";
 import type { AssessmentRow, SubjectRow } from "./stats";
 
@@ -250,12 +250,35 @@ export async function ensureSeed(userId: string) {
     );
   }
 
-  // starter gradebook for this user
-  const subjectCount = await db
-    .select({ value: count() })
-    .from(subjects)
-    .where(eq(subjects.userId, userId));
-  if ((subjectCount[0]?.value ?? 0) > 0) return;
+  // Starter gradebook — only seeded once, the very first time this user
+  // ever loads the stats page. We track this with a flag in user_settings
+  // so deleting all subjects never re-triggers the seed.
+  const settingsRows = await db
+    .select()
+    .from(userSettings)
+    .where(eq(userSettings.userId, userId))
+    .limit(1);
+
+  const alreadySeededSubjects =
+    (settingsRows[0]?.theme as Record<string, unknown> | null)?.__subjectsSeedDone === true;
+
+  if (alreadySeededSubjects) return;
+
+  // Mark as seeded FIRST so even if the inserts fail we don't loop forever.
+  await db
+    .insert(userSettings)
+    .values({
+      userId,
+      theme: { __subjectsSeedDone: true } as unknown as import("./theme").Theme,
+      updatedAt: new Date(),
+    })
+    .onConflictDoUpdate({
+      target: userSettings.userId,
+      set: {
+        theme: sql`user_settings.theme || '{"__subjectsSeedDone":true}'::jsonb`,
+        updatedAt: new Date(),
+      },
+    });
 
   const day = 24 * 60 * 60 * 1000;
   const daysAgo = (n: number) => new Date(Date.now() - n * day).toISOString().slice(0, 10);
