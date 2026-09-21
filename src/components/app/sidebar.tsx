@@ -52,7 +52,7 @@ function PageRow({
           : "text-slate-600 hover:bg-black/[0.045] dark:text-neutral-300 dark:hover:bg-white/[0.06]"
       }`}
     >
-      <Link href={`/app/p/${page.id}`} onClick={onNavigate} className="flex min-w-0 flex-1 items-center gap-2">
+      <Link href={`/app/p/${page.id}`} onClick={onNavigate} prefetch={true} className="flex min-w-0 flex-1 items-center gap-2">
         <span
           className={`grid size-[26px] shrink-0 place-items-center rounded-lg ${
             active ? "bg-[var(--accent)] text-white" : "bg-black/[0.05] text-slate-500 dark:bg-white/10 dark:text-neutral-300"
@@ -137,8 +137,13 @@ export function Sidebar({
     setCreating(true);
     try {
       const page = await createPageAction();
+      // Add the new page to the local list immediately so the sidebar updates
+      // without waiting for a server round-trip.
+      setList((cur) => [
+        ...cur,
+        { id: page.id, title: page.title, icon: page.icon, cover: page.cover, sortOrder: page.sortOrder, favorite: page.favorite },
+      ]);
       router.push(`/app/p/${page.id}`);
-      router.refresh();
       onNavigate?.();
     } finally {
       setCreating(false);
@@ -152,7 +157,6 @@ export function Sidebar({
     if (pathname === `/app/p/${id}`) {
       const remaining = list.filter((p) => p.id !== id);
       router.push(remaining.length ? `/app/p/${remaining[0].id}` : "/app");
-      router.refresh();
     }
   }
 
@@ -171,6 +175,7 @@ export function Sidebar({
       <Link
         href={href}
         onClick={onNavigate}
+        prefetch={true}
         className={`flex items-center gap-2 rounded-xl px-2.5 py-[7px] text-[13.5px] font-semibold transition ${
           active
             ? "bg-[color-mix(in_srgb,var(--accent)_16%,transparent)] text-slate-900 dark:text-white"
