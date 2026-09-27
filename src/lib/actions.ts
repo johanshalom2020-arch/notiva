@@ -1,7 +1,7 @@
 "use server";
 
 import { db } from "@/db";
-import { assessments, blocks, pages, subjects, userSettings } from "@/db/schema";
+import { assessments, blocks, events, pages, subjects, userSettings } from "@/db/schema";
 import { and, eq, gte, inArray, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { requireUser } from "./session";
@@ -270,6 +270,58 @@ export async function deleteAssessmentAction(id: string) {
     .where(and(eq(assessments.id, id), inArray(assessments.subjectId, ownedSubjectsSubquery(user.id))));
   revalidatePath("/app");
   revalidatePath("/app/stats");
+}
+
+/* --------------------------------- calendar --------------------------------- */
+
+export async function createEventAction(data: {
+  title: string;
+  date: string;
+  time?: string | null;
+  notes?: string;
+  color?: string;
+  remindMinutesBefore?: number | null;
+}) {
+  const user = await requireUser();
+  const [row] = await db
+    .insert(events)
+    .values({
+      userId: user.id,
+      title: data.title.trim() || "Untitled event",
+      date: data.date,
+      time: data.time ?? null,
+      notes: data.notes ?? "",
+      color: data.color ?? "#7c3aed",
+      remindMinutesBefore: data.remindMinutesBefore ?? null,
+    })
+    .returning();
+  revalidatePath("/app/calendar");
+  return row;
+}
+
+export async function updateEventAction(
+  id: string,
+  patch: Partial<{
+    title: string;
+    date: string;
+    time: string | null;
+    notes: string;
+    color: string;
+    remindMinutesBefore: number | null;
+  }>,
+) {
+  const user = await requireUser();
+  await db
+    .update(events)
+    .set({ ...patch, updatedAt: new Date() })
+    .where(and(eq(events.id, id), eq(events.userId, user.id)));
+  revalidatePath("/app/calendar");
+}
+
+export async function deleteEventAction(id: string) {
+  const user = await requireUser();
+  await db.delete(events).where(and(eq(events.id, id), eq(events.userId, user.id)));
+  revalidatePath("/app/calendar");
 }
 
 /* ------------------------------ quick actions ------------------------------ */
