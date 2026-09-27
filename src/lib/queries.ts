@@ -1,5 +1,5 @@
 import { db } from "@/db";
-import { assessments, blocks, pages, subjects, userSettings } from "@/db/schema";
+import { assessments, blocks, events, pages, subjects, userSettings } from "@/db/schema";
 import { and, asc, count, desc, eq, sql } from "drizzle-orm";
 import { DEFAULT_THEME, type Theme } from "./theme";
 import type { AssessmentRow, SubjectRow } from "./stats";
@@ -138,6 +138,16 @@ export async function getCounts(userId: string) {
     subjects: subjectCount?.value ?? 0,
     assessments: assessmentCount?.value ?? 0,
   };
+}
+
+/* --------------------------------- calendar --------------------------------- */
+
+export async function getEvents(userId: string) {
+  return db
+    .select()
+    .from(events)
+    .where(eq(events.userId, userId))
+    .orderBy(asc(events.date), asc(events.time));
 }
 
 /* ---------------------------------- seeding -------------------------------- */
