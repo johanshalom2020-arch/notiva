@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   BarChart3,
+  CalendarDays,
   Check,
   LayoutDashboard,
   ListChecks,
@@ -222,6 +223,7 @@ export function Sidebar({
         {navItem("/app", "Dashboard", LayoutDashboard)}
         {navItem("/app/stats", "Statistics", BarChart3)}
         {navItem("/app/tasks", "All Tasks", ListChecks)}
+        {navItem("/app/calendar", "Calendar", CalendarDays)}
         {navItem("/app/customize", "Customize", Palette)}
       </nav>
 
