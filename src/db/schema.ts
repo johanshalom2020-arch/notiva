@@ -139,3 +139,36 @@ export const assessments = pgTable(
   },
   (t) => [index("assessments_subject_idx").on(t.subjectId)],
 );
+
+/* --------------------------------- calendar -------------------------------- */
+
+export const events = pgTable(
+  "events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    title: text("title").notNull().default(""),
+    notes: text("notes").notNull().default(""),
+    // Stored as plain "YYYY-MM-DD" text, same convention as assessments.date —
+    // avoids timezone drift since this is a calendar date, not an instant.
+    date: text("date").notNull(),
+    // "HH:MM" 24-hour, or null for an all-day event.
+    time: text("time"),
+    color: text("color").notNull().default("#7c3aed"),
+    // Minutes before the event's date/time to flag it as an upcoming
+    // reminder in the UI. Null = no reminder set for this event.
+    remindMinutesBefore: integer("remind_minutes_before"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("events_user_idx").on(t.userId),
+    index("events_date_idx").on(t.date),
+  ],
+);
