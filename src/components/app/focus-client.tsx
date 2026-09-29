@@ -84,7 +84,9 @@ const PETALS = Array.from({ length: 24 }).map((_, i) => ({
 
 const TIMER_PRESETS = [5, 10, 15, 25, 45, 60];
 const DEFAULT_MINUTES = 25;
-const DEFAULT_VIDEO_ID = "jfKfPfyJRdk"; // A long-running 24/7 lofi stream — swap it below any time.
+// No hardcoded default stream — even famous "always live" streams get taken
+// down, renamed, or restarted with a new video ID over time, so baking one in
+// here just breaks later. The panel starts empty and asks for a link instead.
 
 /* --------------------------------- ring ------------------------------------ */
 
@@ -249,7 +251,7 @@ export function FocusClient() {
   }
 
   /* ---------------------------------- music --------------------------------- */
-  const [videoId, setVideoId] = useState(DEFAULT_VIDEO_ID);
+  const [videoId, setVideoId] = useState<string | null>(null);
   const [videoInput, setVideoInput] = useState("");
 
   useEffect(() => {
@@ -448,21 +450,29 @@ export function FocusClient() {
               <p className="mb-3 flex items-center gap-1.5 text-[10.5px] font-extrabold uppercase tracking-widest text-rose-400">
                 <Music2 size={12} /> Sakura radio
               </p>
-              <div className="overflow-hidden rounded-xl">
-                <iframe
-                  key={videoId}
-                  width="100%"
-                  height="160"
-                  src={`https://www.youtube.com/embed/${videoId}?autoplay=0`}
-                  title="Focus music"
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                  allowFullScreen
-                  className="border-0"
-                />
-              </div>
+              {videoId ? (
+                <div className="overflow-hidden rounded-xl">
+                  <iframe
+                    key={videoId}
+                    width="100%"
+                    height="160"
+                    src={`https://www.youtube.com/embed/${videoId}?autoplay=0`}
+                    title="Focus music"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowFullScreen
+                    className="border-0"
+                  />
+                </div>
+              ) : (
+                <div className="flex h-[160px] flex-col items-center justify-center rounded-xl bg-rose-50/80 px-4 text-center dark:bg-white/5">
+                  <Music2 size={20} className="mb-2 text-rose-300" />
+                  <p className="text-[12px] font-semibold text-rose-400">
+                    Paste a YouTube link below to start your focus playlist
+                  </p>
+                </div>
+              )}
               <p className="mt-2 text-[11px] text-rose-400">
-                Defaults to a long-running lofi stream. If it doesn&apos;t load, paste any YouTube
-                video or live link below.
+                Works with any YouTube video, playlist, or live stream link.
               </p>
               <div className="mt-2 flex items-center gap-2">
                 <input
