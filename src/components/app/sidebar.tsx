@@ -16,6 +16,7 @@ import {
   Plus,
   Search,
   Star,
+  Timer,
   Trash2,
   X,
 } from "lucide-react";
@@ -224,6 +225,7 @@ export function Sidebar({
         {navItem("/app/stats", "Statistics", BarChart3)}
         {navItem("/app/tasks", "All Tasks", ListChecks)}
         {navItem("/app/calendar", "Calendar", CalendarDays)}
+        {navItem("/app/focus", "Focus Timer", Timer)}
         {navItem("/app/customize", "Customize", Palette)}
       </nav>
 
