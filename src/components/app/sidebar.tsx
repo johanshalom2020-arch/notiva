@@ -16,6 +16,7 @@ import {
   Plus,
   Search,
   Star,
+  Table2,
   Timer,
   Trash2,
   X,
@@ -225,6 +226,7 @@ export function Sidebar({
         {navItem("/app/stats", "Statistics", BarChart3)}
         {navItem("/app/tasks", "All Tasks", ListChecks)}
         {navItem("/app/calendar", "Calendar", CalendarDays)}
+        {navItem("/app/timetable", "Timetable", Table2)}
         {navItem("/app/focus", "Focus Timer", Timer)}
         {navItem("/app/customize", "Customize", Palette)}
       </nav>
