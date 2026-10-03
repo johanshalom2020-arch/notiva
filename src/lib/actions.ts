@@ -1,7 +1,16 @@
 "use server";
 
 import { db } from "@/db";
-import { assessments, blocks, events, pages, subjects, userSettings } from "@/db/schema";
+import {
+  assessments,
+  blocks,
+  events,
+  pages,
+  subjects,
+  timetableEntries,
+  timetableExceptions,
+  userSettings,
+} from "@/db/schema";
 import { and, eq, gte, inArray, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { requireUser } from "./session";
@@ -322,6 +331,139 @@ export async function deleteEventAction(id: string) {
   const user = await requireUser();
   await db.delete(events).where(and(eq(events.id, id), eq(events.userId, user.id)));
   revalidatePath("/app/calendar");
+}
+
+/**
+ * Bulk-inserts events parsed from an uploaded .ics file in a single query.
+ * The file is parsed client-side (see calendar-client.tsx); this action just
+ * trusts the already-parsed rows and scopes them to the current user.
+ */
+export async function importEventsAction(
+  items: { title: string; date: string; time?: string | null; notes?: string; color?: string }[],
+) {
+  const user = await requireUser();
+  if (items.length === 0) return [];
+  const rows = await db
+    .insert(events)
+    .values(
+      items.map((item) => ({
+        userId: user.id,
+        title: item.title.trim() || "Untitled event",
+        date: item.date,
+        time: item.time ?? null,
+        notes: item.notes ?? "",
+        color: item.color ?? "#7c3aed",
+        remindMinutesBefore: null,
+      })),
+    )
+    .returning();
+  revalidatePath("/app/calendar");
+  return rows;
+}
+
+/* --------------------------------- timetable --------------------------------- */
+
+async function assertTimetableEntryOwner(entryId: string, userId: string) {
+  const rows = await db
+    .select({ id: timetableEntries.id })
+    .from(timetableEntries)
+    .where(and(eq(timetableEntries.id, entryId), eq(timetableEntries.userId, userId)))
+    .limit(1);
+  if (rows.length === 0) throw new Error("Timetable entry not found");
+}
+
+export async function createTimetableEntryAction(data: {
+  subjectId?: string | null;
+  title: string;
+  dayOfWeek: number;
+  startTime: string;
+  endTime: string;
+  room?: string;
+  color?: string;
+  termStart?: string | null;
+  termEnd?: string | null;
+}) {
+  const user = await requireUser();
+  if (data.subjectId) {
+    await assertSubjectOwner(data.subjectId, user.id);
+  }
+  const [row] = await db
+    .insert(timetableEntries)
+    .values({
+      userId: user.id,
+      subjectId: data.subjectId ?? null,
+      title: data.title.trim(),
+      dayOfWeek: Math.min(6, Math.max(0, Math.round(data.dayOfWeek))),
+      startTime: data.startTime,
+      endTime: data.endTime,
+      room: data.room ?? "",
+      color: data.color ?? "#7c3aed",
+      termStart: data.termStart ?? null,
+      termEnd: data.termEnd ?? null,
+    })
+    .returning();
+  revalidatePath("/app/timetable");
+  return row;
+}
+
+export async function updateTimetableEntryAction(
+  id: string,
+  patch: Partial<{
+    subjectId: string | null;
+    title: string;
+    dayOfWeek: number;
+    startTime: string;
+    endTime: string;
+    room: string;
+    color: string;
+    termStart: string | null;
+    termEnd: string | null;
+  }>,
+) {
+  const user = await requireUser();
+  await assertTimetableEntryOwner(id, user.id);
+  if (patch.subjectId) {
+    await assertSubjectOwner(patch.subjectId, user.id);
+  }
+  await db
+    .update(timetableEntries)
+    .set({ ...patch, updatedAt: new Date() })
+    .where(and(eq(timetableEntries.id, id), eq(timetableEntries.userId, user.id)));
+  revalidatePath("/app/timetable");
+}
+
+export async function deleteTimetableEntryAction(id: string) {
+  const user = await requireUser();
+  await db
+    .delete(timetableEntries)
+    .where(and(eq(timetableEntries.id, id), eq(timetableEntries.userId, user.id)));
+  revalidatePath("/app/timetable");
+}
+
+/**
+ * Toggles whether a single occurrence (one specific date) of a recurring
+ * entry is cancelled, without touching the recurring entry itself. Calling
+ * this again for the same entry+date un-cancels it.
+ */
+export async function toggleTimetableExceptionAction(entryId: string, date: string) {
+  const user = await requireUser();
+  await assertTimetableEntryOwner(entryId, user.id);
+
+  const existing = await db
+    .select({ id: timetableExceptions.id })
+    .from(timetableExceptions)
+    .where(and(eq(timetableExceptions.entryId, entryId), eq(timetableExceptions.date, date)))
+    .limit(1);
+
+  if (existing.length > 0) {
+    await db.delete(timetableExceptions).where(eq(timetableExceptions.id, existing[0].id));
+    revalidatePath("/app/timetable");
+    return { cancelled: false };
+  }
+
+  await db.insert(timetableExceptions).values({ entryId, date });
+  revalidatePath("/app/timetable");
+  return { cancelled: true };
 }
 
 /* ------------------------------ quick actions ------------------------------ */
