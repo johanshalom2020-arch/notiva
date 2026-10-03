@@ -1,5 +1,14 @@
 import { db } from "@/db";
-import { assessments, blocks, events, pages, subjects, userSettings } from "@/db/schema";
+import {
+  assessments,
+  blocks,
+  events,
+  pages,
+  subjects,
+  timetableEntries,
+  timetableExceptions,
+  userSettings,
+} from "@/db/schema";
 import { and, asc, count, desc, eq, sql } from "drizzle-orm";
 import { DEFAULT_THEME, type Theme } from "./theme";
 import type { AssessmentRow, SubjectRow } from "./stats";
@@ -148,6 +157,42 @@ export async function getEvents(userId: string) {
     .from(events)
     .where(eq(events.userId, userId))
     .orderBy(asc(events.date), asc(events.time));
+}
+
+/* --------------------------------- timetable --------------------------------- */
+
+export async function getTimetable(userId: string) {
+  return db
+    .select({
+      id: timetableEntries.id,
+      subjectId: timetableEntries.subjectId,
+      subjectName: subjects.name,
+      subjectColor: subjects.color,
+      title: timetableEntries.title,
+      dayOfWeek: timetableEntries.dayOfWeek,
+      startTime: timetableEntries.startTime,
+      endTime: timetableEntries.endTime,
+      room: timetableEntries.room,
+      color: timetableEntries.color,
+      termStart: timetableEntries.termStart,
+      termEnd: timetableEntries.termEnd,
+    })
+    .from(timetableEntries)
+    .leftJoin(subjects, eq(timetableEntries.subjectId, subjects.id))
+    .where(eq(timetableEntries.userId, userId))
+    .orderBy(asc(timetableEntries.dayOfWeek), asc(timetableEntries.startTime));
+}
+
+export async function getTimetableExceptions(userId: string) {
+  return db
+    .select({
+      id: timetableExceptions.id,
+      entryId: timetableExceptions.entryId,
+      date: timetableExceptions.date,
+    })
+    .from(timetableExceptions)
+    .innerJoin(timetableEntries, eq(timetableExceptions.entryId, timetableEntries.id))
+    .where(eq(timetableEntries.userId, userId));
 }
 
 /* ---------------------------------- seeding -------------------------------- */
