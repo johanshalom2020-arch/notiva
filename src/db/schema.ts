@@ -8,6 +8,7 @@ import {
   real,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 import type { Theme } from "@/lib/theme";
@@ -170,5 +171,64 @@ export const events = pgTable(
   (t) => [
     index("events_user_idx").on(t.userId),
     index("events_date_idx").on(t.date),
+  ],
+);
+
+/* -------------------------------- timetable --------------------------------- */
+
+export const timetableEntries = pgTable(
+  "timetable_entries",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    // Optional link to an existing Subject — reuses that subject's name and
+    // color so a timetable entry doesn't have to duplicate them. Null means
+    // this entry uses its own title/color instead.
+    subjectId: uuid("subject_id").references(() => subjects.id, { onDelete: "set null" }),
+    title: text("title").notNull().default(""),
+    // 0 = Sunday .. 6 = Saturday. Any day is allowed, no weekday restriction.
+    dayOfWeek: integer("day_of_week").notNull(),
+    // "HH:MM" 24-hour, same convention as events.time.
+    startTime: text("start_time").notNull(),
+    endTime: text("end_time").notNull(),
+    room: text("room").notNull().default(""),
+    // Used only when subjectId is null.
+    color: text("color").notNull().default("#7c3aed"),
+    // Optional term/semester window — the entry only repeats between these
+    // two dates (inclusive). Either or both may be null, meaning "always".
+    termStart: text("term_start"),
+    termEnd: text("term_end"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("timetable_entries_user_idx").on(t.userId),
+    index("timetable_entries_day_idx").on(t.dayOfWeek),
+  ],
+);
+
+export const timetableExceptions = pgTable(
+  "timetable_exceptions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    entryId: uuid("entry_id")
+      .notNull()
+      .references(() => timetableEntries.id, { onDelete: "cascade" }),
+    // "YYYY-MM-DD" — the single occurrence of the recurring entry to skip,
+    // without deleting or modifying the recurring entry itself.
+    date: text("date").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("timetable_exceptions_entry_idx").on(t.entryId),
+    uniqueIndex("timetable_exceptions_entry_date_uq").on(t.entryId, t.date),
   ],
 );
