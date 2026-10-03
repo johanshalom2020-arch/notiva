@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
   Bell,
   BellOff,
@@ -8,11 +8,18 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock,
+  Loader2,
   Plus,
   Trash2,
+  Upload,
   X,
 } from "lucide-react";
-import { createEventAction, deleteEventAction, updateEventAction } from "@/lib/actions";
+import {
+  createEventAction,
+  deleteEventAction,
+  importEventsAction,
+  updateEventAction,
+} from "@/lib/actions";
 
 type EventRow = {
   id: string;
@@ -126,6 +133,78 @@ function emptyForm(date: string): FormState {
   };
 }
 
+/**
+ * Minimal iCalendar (.ics) parser — handles the common VEVENT fields
+ * (SUMMARY, DTSTART, DTEND, DESCRIPTION) from files exported by Google
+ * Calendar, Outlook, Apple Calendar, and most school/university portals.
+ *
+ * Known limitations, kept intentionally simple rather than silently wrong:
+ *  - Recurring events (RRULE) are imported as a single occurrence on their
+ *    DTSTART date only — the recurrence rule itself isn't expanded.
+ *  - Timed events are read as local wall-clock time; a trailing "Z" (UTC)
+ *    on the timestamp is stripped rather than converted, so times from a
+ *    calendar in a very different timezone may be off by a few hours.
+ */
+function parseIcs(text: string): { title: string; date: string; time: string | null; notes: string }[] {
+  // Unfold RFC 5545 continuation lines (a line starting with a space or tab
+  // is a continuation of the previous line).
+  const unfolded = text.replace(/\r\n/g, "\n").replace(/\n[ \t]/g, "");
+  const lines = unfolded.split("\n");
+
+  const results: { title: string; date: string; time: string | null; notes: string }[] = [];
+  let inEvent = false;
+  let title = "";
+  let notes = "";
+  let date: string | null = null;
+  let time: string | null = null;
+
+  function unescapeText(v: string) {
+    return v.replace(/\\n/gi, "\n").replace(/\\,/g, ",").replace(/\\;/g, ";").replace(/\\\\/g, "\\");
+  }
+
+  function parseDateValue(raw: string) {
+    const value = raw.replace(/Z$/, "");
+    const m = value.match(/^(\d{4})(\d{2})(\d{2})(?:T(\d{2})(\d{2}))?/);
+    if (!m) return;
+    const [, y, mo, d, hh, mm] = m;
+    date = `${y}-${mo}-${d}`;
+    time = hh && mm ? `${hh}:${mm}` : null;
+  }
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (!line) continue;
+    if (line === "BEGIN:VEVENT") {
+      inEvent = true;
+      title = "";
+      notes = "";
+      date = null;
+      time = null;
+      continue;
+    }
+    if (line === "END:VEVENT") {
+      if (inEvent && date) {
+        results.push({ title: title || "Untitled event", date, time, notes });
+      }
+      inEvent = false;
+      continue;
+    }
+    if (!inEvent) continue;
+
+    const colonIndex = line.indexOf(":");
+    if (colonIndex === -1) continue;
+    const rawKey = line.slice(0, colonIndex);
+    const value = line.slice(colonIndex + 1);
+    const key = rawKey.split(";")[0].toUpperCase();
+
+    if (key === "SUMMARY") title = unescapeText(value);
+    else if (key === "DESCRIPTION") notes = unescapeText(value);
+    else if (key === "DTSTART") parseDateValue(value);
+  }
+
+  return results;
+}
+
 export function CalendarClient({ initialEvents }: { initialEvents: EventRow[] }) {
   const [events, setEvents] = useState<EventRow[]>(initialEvents);
   const today = new Date();
@@ -134,6 +213,9 @@ export function CalendarClient({ initialEvents }: { initialEvents: EventRow[] })
   const [selected, setSelected] = useState<string>(todayKey());
   const [form, setForm] = useState<FormState | null>(null);
   const [saving, setSaving] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [importMessage, setImportMessage] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const weeks = useMemo(() => buildMonth(viewYear, viewMonth), [viewYear, viewMonth]);
 
@@ -160,6 +242,37 @@ export function CalendarClient({ initialEvents }: { initialEvents: EventRow[] })
       .sort((a, b) => a.at.getTime() - b.at.getTime())
       .slice(0, 6);
   }, [events]);
+
+  async function handleImportFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // allow re-selecting the same file later
+    if (!file) return;
+
+    setImporting(true);
+    setImportMessage(null);
+    try {
+      const text = await file.text();
+      const parsed = parseIcs(text);
+      if (parsed.length === 0) {
+        setImportMessage("No events found in that file.");
+        return;
+      }
+      const toInsert = parsed.map((p, i) => ({
+        title: p.title,
+        date: p.date,
+        time: p.time,
+        notes: p.notes,
+        color: COLORS[i % COLORS.length],
+      }));
+      const created = await importEventsAction(toInsert);
+      setEvents((cur) => [...cur, ...(created as EventRow[])]);
+      setImportMessage(`Imported ${created.length} event${created.length === 1 ? "" : "s"}.`);
+    } catch {
+      setImportMessage("Couldn't read that file — make sure it's a .ics calendar export.");
+    } finally {
+      setImporting(false);
+    }
+  }
 
   function goToday() {
     const t = new Date();
@@ -247,6 +360,23 @@ export function CalendarClient({ initialEvents }: { initialEvents: EventRow[] })
               </h1>
             </div>
             <div className="flex items-center gap-1.5">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".ics,text/calendar"
+                onChange={handleImportFile}
+                className="hidden"
+              />
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={importing}
+                title="Import a .ics calendar file"
+                className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[12.5px] font-semibold text-slate-500 hover:bg-black/[0.05] disabled:opacity-50 dark:text-neutral-400 dark:hover:bg-white/10"
+              >
+                {importing ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
+                Import
+              </button>
+              <span className="mx-1 h-5 w-px bg-black/10 dark:bg-white/10" />
               <button
                 onClick={() => shiftMonth(-1)}
                 aria-label="Previous month"
@@ -269,6 +399,12 @@ export function CalendarClient({ initialEvents }: { initialEvents: EventRow[] })
               </button>
             </div>
           </div>
+
+          {importMessage && (
+            <p className="-mt-3 mb-4 text-[12px] font-medium text-slate-500 dark:text-neutral-400">
+              {importMessage}
+            </p>
+          )}
 
           <div className="grid grid-cols-7 gap-1.5">
             {WEEKDAYS.map((w) => (
