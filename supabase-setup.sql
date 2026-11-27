@@ -78,3 +78,10 @@ create table if not exists assessments (
   updated_at timestamptz not null default now()
 );
 create index if not exists assessments_subject_idx on assessments(subject_id);
+
+-- Google Calendar OAuth credentials (encrypted by the application).
+create table if not exists google_calendar_connections (
+  user_id uuid primary key references users(id) on delete cascade,
+  refresh_token text not null,
+  updated_at timestamptz not null default now()
+);
