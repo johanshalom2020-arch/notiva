@@ -83,3 +83,38 @@ You never seed data by hand — every account that signs up automatically gets t
 - **Deployed but latest changes missing** → every `git` change (or GitHub web upload) auto-triggers a fresh Netlify deploy — check the **Deploys** tab.
 
 (If you ever *do* want the terminal: `npx drizzle-kit push` creates the same tables as `supabase-setup.sql`, using `DATABASE_URL` from `.env`.)
+
+## Optional: connect Google Calendar
+
+The Calendar page can show the signed-in user's **primary Google calendar** as a
+read-only live overlay. Google events, including expanded recurring events, are
+not copied into Notiva; local Notiva events are not sent to Google. Timed events
+are shown in the browser's time zone. All-day events appear on each day they
+cover; timed multi-day events appear on their start day. Use Google Calendar to
+edit Google events. Refresh or change months to reload them.
+
+1. In Google Cloud Console, create or choose a project and enable the **Google
+   Calendar API**. Configure the OAuth consent screen (add test users while the
+   app is in testing), requesting the `https://www.googleapis.com/auth/calendar.readonly`
+   scope. Production/public use may require Google verification.
+2. Create a **Web application** OAuth client. Add the exact redirect URI
+   `https://YOUR-SITE/api/google-calendar/callback` (for local development,
+   `http://localhost:3000/api/google-calendar/callback`).
+3. Set these environment variables on your hosting provider and redeploy:
+
+   | Key | Value |
+   |---|---|
+   | `GOOGLE_CLIENT_ID` | OAuth client ID |
+   | `GOOGLE_CLIENT_SECRET` | OAuth client secret |
+   | `GOOGLE_REDIRECT_URI` | Exact redirect URI registered above, using the canonical site origin |
+   | `GOOGLE_TOKEN_ENCRYPTION_KEY` | A persistent, random 32-byte key encoded as 64 hexadecimal characters (generate with `openssl rand -hex 32`) |
+
+   Keep the client secret and encryption key private. Back up the key securely:
+   changing it makes existing connections unreadable and users must reconnect.
+   Each deployment origin needs its own matching redirect URI configuration.
+4. Run the `google_calendar_connections` table statement at the end of
+   `supabase-setup.sql` in your existing database (or run `npx drizzle-kit push`).
+   Then sign in to Notiva, open Calendar and select **Connect Google Calendar**.
+   Disconnect removes the stored credential and attempts to revoke it at Google.
+   If revocation fails while Google is unreachable, revoke access in your Google
+   account's third-party connections too.

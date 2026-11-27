@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Bell,
   BellOff,
@@ -29,6 +29,7 @@ type EventRow = {
   time: string | null; // "HH:MM" or null for all-day
   color: string;
   remindMinutesBefore: number | null;
+  source?: "google";
 };
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -207,6 +208,12 @@ function parseIcs(text: string): { title: string; date: string; time: string | n
 
 export function CalendarClient({ initialEvents }: { initialEvents: EventRow[] }) {
   const [events, setEvents] = useState<EventRow[]>(initialEvents);
+  const [googleEvents, setGoogleEvents] = useState<EventRow[]>([]);
+  const [googleConnected, setGoogleConnected] = useState(false);
+  const [googleConfigured, setGoogleConfigured] = useState(true);
+  const [googleMessage, setGoogleMessage] = useState<string | null>(null);
+  const [googleLoading, setGoogleLoading] = useState(false);
+  const [googleVersion, setGoogleVersion] = useState(0);
   const today = new Date();
   const [viewYear, setViewYear] = useState(today.getFullYear());
   const [viewMonth, setViewMonth] = useState(today.getMonth());
@@ -219,9 +226,59 @@ export function CalendarClient({ initialEvents }: { initialEvents: EventRow[] })
 
   const weeks = useMemo(() => buildMonth(viewYear, viewMonth), [viewYear, viewMonth]);
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const result = params.get("google");
+    if (result) {
+      // The callback result comes from the browser URL, which is unavailable during server rendering.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setGoogleMessage(result === "connected" ? "Google Calendar connected." : result === "denied" ? "Google Calendar access was not granted." : "Couldn't connect Google Calendar. Please try again.");
+      params.delete("google");
+      window.history.replaceState(null, "", window.location.pathname + (params.size ? `?${params}` : ""));
+    }
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const first = weeks[0][0].key.split("-").map(Number);
+    const last = weeks[weeks.length - 1][6].key.split("-").map(Number);
+    const params = new URLSearchParams({
+      timeMin: new Date(first[0], first[1] - 1, first[2]).toISOString(),
+      timeMax: new Date(last[0], last[1] - 1, last[2] + 1).toISOString(),
+      timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+    });
+    // Track this external request so disconnect/refresh cannot race it.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setGoogleLoading(true);
+    fetch(`/api/google-calendar/events?${params}`, { signal: controller.signal })
+      .then(async (response) => {
+        const data = await response.json();
+        setGoogleConnected(!!data.connected);
+        setGoogleConfigured(data.configured !== false);
+        setGoogleEvents(data.events || []);
+        if (!response.ok) setGoogleMessage(data.error || "Couldn't load Google Calendar.");
+      })
+      .catch((error) => { if (error.name !== "AbortError") setGoogleMessage("Couldn't load Google Calendar."); })
+      .finally(() => { if (!controller.signal.aborted) setGoogleLoading(false); });
+    return () => controller.abort();
+  }, [weeks, googleVersion]);
+
+  async function disconnectGoogle() {
+    if (!window.confirm("Disconnect Google Calendar? Your Google events will no longer appear here.")) return;
+    setGoogleLoading(true);
+    try {
+      const response = await fetch("/api/google-calendar/disconnect", { method: "POST" });
+      if (!response.ok) throw new Error();
+      setGoogleConnected(false);
+      setGoogleEvents([]);
+      setGoogleMessage("Google Calendar disconnected.");
+    } catch { setGoogleMessage("Couldn't disconnect Google Calendar. Please try again."); }
+    finally { setGoogleLoading(false); }
+  }
+
   const eventsByDate = useMemo(() => {
     const map = new Map<string, EventRow[]>();
-    for (const ev of events) {
+    for (const ev of [...events, ...googleEvents]) {
       if (!map.has(ev.date)) map.set(ev.date, []);
       map.get(ev.date)!.push(ev);
     }
@@ -229,7 +286,7 @@ export function CalendarClient({ initialEvents }: { initialEvents: EventRow[] })
       list.sort((a, b) => (a.time ?? "").localeCompare(b.time ?? ""));
     }
     return map;
-  }, [events]);
+  }, [events, googleEvents]);
 
   const selectedEvents = eventsByDate.get(selected) ?? [];
 
@@ -461,6 +518,18 @@ export function CalendarClient({ initialEvents }: { initialEvents: EventRow[] })
         {/* side panel */}
         <div className="w-full space-y-5 lg:w-[340px]">
           <div className="rounded-[24px] border border-white/50 bg-white/75 p-5 shadow-2xl shadow-slate-900/10 backdrop-blur-2xl dark:border-white/10 dark:bg-neutral-950/60">
+            <h2 className="text-[15px] font-extrabold">Google Calendar</h2>
+            <p className="mt-1 text-[12px] text-slate-500 dark:text-neutral-400">{googleConnected ? "Primary calendar connected · read-only" : "See your primary Google calendar alongside Notiva events."}</p>
+            <div className="mt-3 flex flex-wrap gap-3 text-[12px] font-semibold text-[var(--accent)]">
+              {googleConnected ? <>
+                <button disabled={googleLoading} onClick={() => { setGoogleMessage(null); setGoogleVersion((v) => v + 1); }} className="disabled:opacity-50">Refresh</button>
+                <a href="/api/google-calendar/connect">Reconnect</a>
+                <button disabled={googleLoading} onClick={disconnectGoogle} className="disabled:opacity-50">Disconnect</button>
+              </> : googleConfigured ? <a href="/api/google-calendar/connect">Connect Google Calendar</a> : <span className="text-slate-500">Setup required by the site administrator.</span>}
+            </div>
+            {googleMessage && <p role="status" className="mt-2 text-[12px] text-slate-500 dark:text-neutral-400">{googleMessage}</p>}
+          </div>
+          <div className="rounded-[24px] border border-white/50 bg-white/75 p-5 shadow-2xl shadow-slate-900/10 backdrop-blur-2xl dark:border-white/10 dark:bg-neutral-950/60">
             <div className="mb-3 flex items-center justify-between">
               <h2 className="text-[15px] font-extrabold">
                 {new Date(`${selected}T00:00:00`).toLocaleDateString(undefined, {
@@ -486,7 +555,7 @@ export function CalendarClient({ initialEvents }: { initialEvents: EventRow[] })
               {selectedEvents.map((ev) => (
                 <button
                   key={ev.id}
-                  onClick={() => openEdit(ev)}
+                  onClick={() => { if (ev.source !== "google") openEdit(ev); }}
                   className="flex w-full items-start gap-2.5 rounded-xl px-2.5 py-2 text-left hover:bg-black/[0.035] dark:hover:bg-white/[0.05]"
                 >
                   <span
@@ -505,6 +574,7 @@ export function CalendarClient({ initialEvents }: { initialEvents: EventRow[] })
                       ) : (
                         "All day"
                       )}
+                      {ev.source === "google" && <span> · Google Calendar (read-only)</span>}
                       {ev.remindMinutesBefore !== null && (
                         <Bell size={10} className="text-amber-500" />
                       )}

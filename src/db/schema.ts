@@ -232,3 +232,10 @@ export const timetableExceptions = pgTable(
     uniqueIndex("timetable_exceptions_entry_date_uq").on(t.entryId, t.date),
   ],
 );
+
+/* Google Calendar credentials are encrypted before they are stored. */
+export const googleCalendarConnections = pgTable("google_calendar_connections", {
+  userId: uuid("user_id").primaryKey().references(() => users.id, { onDelete: "cascade" }),
+  refreshToken: text("refresh_token").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
